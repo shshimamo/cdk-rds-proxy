@@ -8,10 +8,15 @@ import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
 
 export class CdkRdsProxyStack extends cdk.Stack {
+  public readonly vpc: ec2.Vpc;
+  public readonly lambdaToRDSProxyGroup: ec2.SecurityGroup;
+  public readonly proxy: rds.DatabaseProxy;
+  public readonly databaseCredentialsSecret: secrets.Secret;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const vpc = new ec2.Vpc(this, 'VPC', {
+    this.vpc = new ec2.Vpc(this, 'VPC', {
       maxAzs: 2,
       natGateways: 0,
       cidr: '10.1.0.0/16',
@@ -34,16 +39,16 @@ export class CdkRdsProxyStack extends cdk.Stack {
         this,
         'Bastion to DB Connection',
         {
-          vpc,
+          vpc: this.vpc,
         }
     );
 
     // セキュリティグループ(Lambda to RDS Proxy)
-    const lambdaToRDSProxyGroup = new ec2.SecurityGroup(
+    this.lambdaToRDSProxyGroup = new ec2.SecurityGroup(
         this,
         'Lambda to RDS Proxy Connection',
         {
-          vpc,
+          vpc: this.vpc,
         }
     );
 
@@ -52,7 +57,7 @@ export class CdkRdsProxyStack extends cdk.Stack {
         this,
         'Proxy to DB Connection',
         {
-          vpc,
+          vpc: this.vpc,
         }
     );
     dbConnectionGroup.addIngressRule(
@@ -61,7 +66,7 @@ export class CdkRdsProxyStack extends cdk.Stack {
         'allow db connection'
     );
     dbConnectionGroup.addIngressRule(
-        lambdaToRDSProxyGroup,
+        this.lambdaToRDSProxyGroup,
         ec2.Port.tcp(3306),
         'allow lambda connection'
     );
@@ -73,7 +78,7 @@ export class CdkRdsProxyStack extends cdk.Stack {
 
     // Bastionサーバー
     const host = new ec2.BastionHostLinux(this, 'BastionHost', {
-      vpc,
+      vpc: this.vpc,
       instanceType: ec2.InstanceType.of(
           ec2.InstanceClass.T2,
           ec2.InstanceSize.MICRO
@@ -86,7 +91,7 @@ export class CdkRdsProxyStack extends cdk.Stack {
     host.instance.addUserData('yum -y update', 'yum install -y mysql jq');
 
     // シークレットマネージャー
-    const databaseCredentialsSecret = new secrets.Secret(
+    this.databaseCredentialsSecret = new secrets.Secret(
         this,
         'DBCredentialsSecret',
         {
@@ -101,10 +106,11 @@ export class CdkRdsProxyStack extends cdk.Stack {
           },
         }
     );
+    this.databaseCredentialsSecret.grantRead(host);
 
     // VPCエンドポイント(シークレットマネージャー)
     new ec2.InterfaceVpcEndpoint(this, 'SecretManagerVpcEndpoint', {
-      vpc: vpc,
+      vpc: this.vpc,
       service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
     });
 
@@ -113,12 +119,12 @@ export class CdkRdsProxyStack extends cdk.Stack {
       engine: rds.DatabaseInstanceEngine.mysql({
         version: rds.MysqlEngineVersion.VER_8_0_30,
       }),
-      credentials: rds.Credentials.fromSecret(databaseCredentialsSecret),
+      credentials: rds.Credentials.fromSecret(this.databaseCredentialsSecret),
       instanceType: ec2.InstanceType.of(
           ec2.InstanceClass.T2,
           ec2.InstanceSize.MICRO
       ),
-      vpc,
+      vpc: this.vpc,
       vpcSubnets: {
         subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
       },
@@ -137,42 +143,11 @@ export class CdkRdsProxyStack extends cdk.Stack {
     });
 
     // RDS Proxy
-    const proxy = rdsInstance.addProxy(id + '-proxy', {
-      secrets: [databaseCredentialsSecret],
+    this.proxy = rdsInstance.addProxy(id + '-proxy', {
+      secrets: [this.databaseCredentialsSecret],
       debugLogging: true,
-      vpc,
+      vpc: this.vpc,
       securityGroups: [dbConnectionGroup],
     });
-
-    // Lambda
-    const rdsLambda = new lambda.Function(this, 'RdsProxyHandler', {
-      runtime: lambda.Runtime.GO_1_X,
-      code: lambda.Code.fromAsset('lambda'),
-      handler: 'main',
-      vpc: vpc,
-      securityGroups: [lambdaToRDSProxyGroup],
-      environment: {
-        PROXY_ENDPOINT: proxy.endpoint,
-        RDS_SECRET_NAME: id + '-rds-credentials',
-      },
-    });
-    // const rdsLambda = new lambdaGo.GoFunction(this, 'RdsProxyHandler', {
-    //   entry: 'lambda/main.go',
-    // });
-
-    // シークレットマネージャーへのアクセス権限
-    databaseCredentialsSecret.grantRead(rdsLambda);
-    databaseCredentialsSecret.grantRead(host);
-
-    // API Gateway
-    const restApi = new apigw.RestApi(this, 'RestApi', {
-      restApiName: 'rds-proxy-go',
-      deployOptions: {
-        stageName: 'dev',
-      },
-    });
-    const rdsLambdaIntegration = new apigw.LambdaIntegration(rdsLambda);
-    const booksResource = restApi.root.addResource('books');
-    booksResource.addMethod('GET', rdsLambdaIntegration);
   }
 }

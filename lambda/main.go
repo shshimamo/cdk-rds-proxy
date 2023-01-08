@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
@@ -82,14 +83,14 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	db, err := connect()
 	if err != nil {
 		fmt.Println("[ERROR]", err)
-		return events.APIGatewayProxyResponse{Body: "Error!", StatusCode: 500}, nil
+		return events.APIGatewayProxyResponse{Body: "connect Error!", StatusCode: 500}, nil
 	}
 	defer db.Close()
 
 	rows, err := db.Query("SELECT * FROM books")
 	if err != nil {
 		fmt.Println("[ERROR]", err)
-		return events.APIGatewayProxyResponse{Body: "Error!", StatusCode: 500}, nil
+		return events.APIGatewayProxyResponse{Body: "Query Error!", StatusCode: 500}, nil
 	}
 	defer rows.Close()
 
@@ -99,7 +100,7 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		err := rows.Scan(&book.Id, &book.Name, &book.Price)
 		if err != nil {
 			fmt.Println("[ERROR]", err)
-			return events.APIGatewayProxyResponse{Body: "Error!", StatusCode: 500}, nil
+			return events.APIGatewayProxyResponse{Body: "Scan Error!", StatusCode: 500}, nil
 		}
 		books = append(books, book)
 	}

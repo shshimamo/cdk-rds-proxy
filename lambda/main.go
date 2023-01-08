@@ -5,18 +5,17 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
-
 	"github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
+	"os"
 )
 
 type UserInfo struct {
@@ -29,6 +28,9 @@ type Book struct {
 	Name  string
 	Price int
 }
+
+//go:embed cert/AmazonRootCA1.pem
+var amazonRootCA1 []byte
 
 func connect() (*sql.DB, error) {
 	mySession := session.Must(session.NewSession())
@@ -47,12 +49,7 @@ func connect() (*sql.DB, error) {
 
 	// CA証明書の設定
 	rootCertPool := x509.NewCertPool()
-	absPath, _ := filepath.Abs("./cert/AmazonRootCA1.pem") // https://www.amazontrust.com/repository/AmazonRootCA1.pem
-	pem, err := os.ReadFile(absPath)
-	if err != nil {
-		return nil, err
-	}
-	if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
+	if ok := rootCertPool.AppendCertsFromPEM(amazonRootCA1); !ok {
 		fmt.Println("[ERROR]", "Fialed to append PEM")
 	}
 	mysql.RegisterTLSConfig("custom", &tls.Config{

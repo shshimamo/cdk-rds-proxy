@@ -110,3 +110,7 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		StatusCode: 200,
 	}, nil
 }
+
+func main() {
+	lambda.Start(handleRequest)
+}

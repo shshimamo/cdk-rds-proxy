@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaGo from '@aws-cdk/aws-lambda-go-alpha'
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
@@ -155,6 +156,9 @@ export class CdkRdsProxyStack extends cdk.Stack {
         RDS_SECRET_NAME: id + '-rds-credentials',
       },
     });
+    // const rdsLambda = new lambdaGo.GoFunction(this, 'RdsProxyHandler', {
+    //   entry: 'lambda/main.go',
+    // });
 
     // シークレットマネージャーへのアクセス権限
     databaseCredentialsSecret.grantRead(rdsLambda);

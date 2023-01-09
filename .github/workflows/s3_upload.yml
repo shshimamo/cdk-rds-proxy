@@ -7,18 +7,43 @@ on:
         description: 'File name'
         required: true
         default: 'test.sql'
+      issueNumber:
+        description: 'Issue number'
+        required: true
 
 jobs:
   upload:
     name: Upload to S3
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: octokit/request-action@v2.x
+        id: get_issue
+        with:
+          route: GET /repos/{owner}/{repo}/issues/${{ github.event.inputs.issueNumber }}
+          owner: shshimamo
+          repo: cdk-rds-proxy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get issue body
+        id: get_issue_body
+        env:
+          SQL: ${{fromJson(steps.get_issue.outputs.data).body}}
+        run: echo "::set-output name=body::${{fromJson(steps.get_issue.outputs.data).body}}"
+
+      - name: Get SQL from issue body
+        uses: actions-ecosystem/action-regex-match@v2
+        id: get_sql
+        with:
+          text: ${{ steps.get_issue_body.outputs.body }}
+          regex: '```sql([\s\S]*)```'
+          flags: gm
+
       - name: Deploy
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
         run: |
-          aws s3 cp --region ap-northeast-1 test.sql s3://$BUCKET_NAME/${{ github.event.inputs.filename }}
+          echo ${{ steps.get_sql.outputs.group1 }} > tmp.sql
+          aws s3 cp --region ap-northeast-1 tmp.sql s3://$BUCKET_NAME/${{ github.event.inputs.filename }}

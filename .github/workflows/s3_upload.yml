@@ -25,17 +25,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get issue body
-        id: get_issue_body
-        env:
-          SQL: ${{fromJson(steps.get_issue.outputs.data).body}}
-        run: echo "::set-output name=body::${{fromJson(steps.get_issue.outputs.data).body}}"
-
       - name: Get SQL from issue body
         uses: actions-ecosystem/action-regex-match@v2
         id: get_sql
         with:
-          text: ${{ steps.get_issue_body.outputs.body }}
+          text: ${{fromJson(steps.get_issue.outputs.data).body}}
           regex: '```sql([\s\S]*)```'
           flags: gm
 
@@ -45,5 +39,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
         run: |
-          echo ${{ steps.get_sql.outputs.group1 }} > tmp.sql
+          echo '${{ steps.get_sql.outputs.group1 }}'
+          echo '${{ steps.get_sql.outputs.group1 }}' > tmp.sql
           aws s3 cp --region ap-northeast-1 tmp.sql s3://$BUCKET_NAME/${{ github.event.inputs.filename }}

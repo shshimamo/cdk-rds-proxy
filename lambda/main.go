@@ -12,9 +12,11 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
+	"io"
 	"os"
 )
 
@@ -73,6 +75,26 @@ func connect() (*sql.DB, error) {
 	return db, nil
 }
 
+func getSql() (string, error) {
+	bucketName := os.Getenv("BUCKET_NAME")
+	objectKey := "test.sql"
+	sess := session.Must(session.NewSession())
+	svc := s3.New(sess)
+	obj, err := svc.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		return "", err
+	}
+	defer obj.Body.Close()
+	responseBody, err := io.ReadAll(obj.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(responseBody), nil
+}
+
 func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	jsonReq, _ := json.Marshal(request)
 	fmt.Println(string(jsonReq))
@@ -84,7 +106,13 @@ func handleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT * FROM books")
+	sql, err := getSql()
+	if err != nil {
+		fmt.Println("[ERROR]", err)
+		return events.APIGatewayProxyResponse{Body: "Get SQL Error!", StatusCode: 500}, nil
+	}
+
+	rows, err := db.Query(sql)
 	if err != nil {
 		fmt.Println("[ERROR]", err)
 		return events.APIGatewayProxyResponse{Body: "Query Error!", StatusCode: 500}, nil

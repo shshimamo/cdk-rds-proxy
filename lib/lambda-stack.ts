@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as go from '@aws-cdk/aws-lambda-go-alpha'
 import * as rds from 'aws-cdk-lib/aws-rds';
@@ -28,6 +29,12 @@ export class LambdaStack extends cdk.Stack {
         props.vpc.addGatewayEndpoint("S3VpcEndpoint", {
             service: ec2.InterfaceVpcEndpointAwsService.S3,
         });
+
+        // IAM User for GitHub
+        const githubUser = new iam.User(this, 'GitHubUser', {
+            userName: `${id}-github-user`,
+        });
+        bucket.grantWrite(githubUser);
 
         // Lambda
         const rdsLambda = new go.GoFunction(this, 'RdsProxyHandler', {

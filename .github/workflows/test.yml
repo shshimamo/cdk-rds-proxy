@@ -1,0 +1,23 @@
+name: test
+
+on:
+  issues:
+    types:
+      - labeled
+jobs:
+  test:
+#    if: github.event.label.name == 'test'
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo1
+        run: |
+          echo ${{ github.event.label.name }}
+      - name: echo2
+        run: |
+          echo ${{ github.event.issue.number }}
+      - name: echo3
+        run: |
+          echo ${{ github.actor }}
+      - name: echo4
+        run: |
+          echo "$GITHUB_CONTEXT"
